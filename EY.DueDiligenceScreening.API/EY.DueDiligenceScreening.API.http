@@ -1,0 +1,6 @@
+@EY.DueDiligenceScreening.API_HostAddress = http://localhost:5267
+
+GET {{EY.DueDiligenceScreening.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
