@@ -3,9 +3,8 @@ using EY.DueDiligenceScreening.API.Screening.Domain.Model.Queries;
 
 namespace EY.DueDiligenceScreening.API.Screening.Domain.Services;
 
-
-public interface IOfacScraperService
+public interface IMultiSourceScreeningService
 {
-    Task<List<OfacItem>> ScrapeAsync(GetInfoByCompanyNameQuery query, CancellationToken cancellationToken = default);
+    Task<ScreeningResult> ExecuteScreeningAsync(MultiSourceScreeningQuery query, CancellationToken cancellationToken = default);
 }
 

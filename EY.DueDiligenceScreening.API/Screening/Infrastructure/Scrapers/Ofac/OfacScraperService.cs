@@ -25,13 +25,15 @@ public class OfacScraperService : IOfacScraperService
         _logger = logger;
     }
 
-    public async Task<List<OfacItem>> ScrapeAsync(GetInfoByCompanyNameQuery query)
+    public async Task<List<OfacItem>> ScrapeAsync(GetInfoByCompanyNameQuery query, CancellationToken cancellationToken = default)
     {
         var companyName = query.companyName;
         int minimumScore = 80;
         
         if (string.IsNullOrWhiteSpace(companyName))
             throw new ArgumentException("Company name cannot be empty", nameof(companyName));
+        
+        cancellationToken.ThrowIfCancellationRequested();
 
         var results = new List<OfacItem>();
 
@@ -79,17 +81,20 @@ public class OfacScraperService : IOfacScraperService
                 }}
             ");
             
-            await Task.Delay(800);
+            await Task.Delay(800, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             var nameInput = driver.FindElement(By.Id(NAME_INPUT_ID));
             nameInput.Clear();
             nameInput.SendKeys(companyName);
 
-
             var searchButton = driver.FindElement(By.Id(SEARCH_BUTTON_ID));
             searchButton.Click();
 
-            await Task.Delay(2000); 
+            await Task.Delay(2000, cancellationToken);
+            
+            cancellationToken.ThrowIfCancellationRequested(); 
 
             try
             {
@@ -109,6 +114,10 @@ public class OfacScraperService : IOfacScraperService
                 {
                     try
                     {
+                        // Verificar cancelación cada 10 items
+                        if (results.Count % 10 == 0)
+                            cancellationToken.ThrowIfCancellationRequested();
+
                         var cells = row.FindElements(By.TagName("td"));
                         
                         if (cells.Count != 6)
@@ -141,7 +150,7 @@ public class OfacScraperService : IOfacScraperService
                         );
                         results.Add(item);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         continue;
                     }
@@ -151,9 +160,17 @@ public class OfacScraperService : IOfacScraperService
             catch (WebDriverTimeoutException)
             {
             }
+
+            _logger.LogInformation("✅ OFAC scraping (Selenium) completed: {Count} results for '{Company}'", results.Count, companyName);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("⚠️ OFAC scraping (Selenium) cancelled for: {Company}", companyName);
+            throw; // Re-lanzar para que el servicio lo maneje
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "❌ Critical error scraping OFAC (Selenium) for: {Company}", companyName);
             throw new InvalidOperationException($"Failed to scrape OFAC for company: {companyName}", ex);
         }
         finally

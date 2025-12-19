@@ -15,16 +15,19 @@ public class ScreeningController : ControllerBase
     private readonly IOfacScraperService _ofacScraperService;
     private readonly IOffshoreLeaksScraperService _offshoreLeaksScraperService;
     private readonly IWorldBankScraperService _worldBankScraperService;
+    private readonly IMultiSourceScreeningService _multiSourceScreeningService;
 
     public ScreeningController(
         IOfacScraperService ofacScraperService,
         IOffshoreLeaksScraperService offshoreLeaksScraperService,
         IWorldBankScraperService worldBankScraperService,
+        IMultiSourceScreeningService multiSourceScreeningService,
         ILogger<ScreeningController> logger)
     {
         _ofacScraperService = ofacScraperService;
         _offshoreLeaksScraperService = offshoreLeaksScraperService;
         _worldBankScraperService = worldBankScraperService;
+        _multiSourceScreeningService = multiSourceScreeningService;
     }
 
     [HttpPost("ofac")]
@@ -33,10 +36,11 @@ public class ScreeningController : ControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), 401)]
     [ProducesResponseType(typeof(ApiErrorResponse), 500)]
     public async Task<ActionResult<OfacScrapeResultResource>> ScrapeOfac(
-        [FromBody] OfacScrapeRequestResource request)
+        [FromBody] OfacScrapeRequestResource request,
+        CancellationToken cancellationToken)
     {
         var query = new GetInfoByCompanyNameQuery(request.CompanyName);
-        var results = await _ofacScraperService.ScrapeAsync(query);
+        var results = await _ofacScraperService.ScrapeAsync(query, cancellationToken);
 
         var response = new OfacScrapeResultResource(
             CompanyName: request.CompanyName,
@@ -61,10 +65,11 @@ public class ScreeningController : ControllerBase
     [ProducesResponseType(typeof(OffshoreLeaksResultResource), 200)]
     [ProducesResponseType(typeof(ApiErrorResponse), 400)]
     public async Task<ActionResult<OffshoreLeaksResultResource>> ScrapeOffshoreLeaks(
-        [FromBody] OfacScrapeRequestResource request) 
+        [FromBody] OfacScrapeRequestResource request,
+        CancellationToken cancellationToken) 
     {
         var query = new GetInfoByCompanyNameQuery(request.CompanyName);
-        var results = await _offshoreLeaksScraperService.ScrapeAsync(query);
+        var results = await _offshoreLeaksScraperService.ScrapeAsync(query, cancellationToken);
 
         var response = new OffshoreLeaksResultResource(
             CompanyName: request.CompanyName,
@@ -89,10 +94,11 @@ public class ScreeningController : ControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), 401)]
     [ProducesResponseType(typeof(ApiErrorResponse), 500)]
     public async Task<ActionResult<WorldBankResultResource>> ScrapeWorldBank(
-        [FromBody] OfacScrapeRequestResource request)
+        [FromBody] OfacScrapeRequestResource request,
+        CancellationToken cancellationToken)
     {
         var query = new GetInfoByCompanyNameQuery(request.CompanyName);
-        var results = await _worldBankScraperService.ScrapeAsync(query);
+        var results = await _worldBankScraperService.ScrapeAsync(query, cancellationToken);
 
         var response = new WorldBankResultResource(
             CompanyName: request.CompanyName,
@@ -106,6 +112,40 @@ public class ScreeningController : ControllerBase
                 Grounds: item.Grounds
             )).ToList(),
             ExecutedAt: DateTime.UtcNow
+        );
+
+        return Ok(response);
+    }
+
+    [HttpPost("multi-source")]
+    [ProducesResponseType(typeof(MultiSourceScreeningResponse), 200)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 400)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 401)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 500)]
+    public async Task<ActionResult<MultiSourceScreeningResponse>> ExecuteMultiSourceScreening(
+        [FromBody] MultiSourceScreeningRequest request,
+        CancellationToken cancellationToken)
+    {
+        var query = new MultiSourceScreeningQuery(
+            request.CompanyName,
+            request.Sources
+        );
+
+        var result = await _multiSourceScreeningService.ExecuteScreeningAsync(query, cancellationToken);
+
+        var response = new MultiSourceScreeningResponse(
+            CompanyName: result.CompanyName,
+            TotalSources: result.TotalSources,
+            SuccessfulSources: result.SuccessfulSources,
+            FailedSources: result.FailedSources,
+            TotalMatches: result.TotalMatches,
+            SourceResults: result.SourceResults.Select(sr => new SourceResultResource(
+                Source: sr.Source.ToString(),
+                TotalResults: sr.TotalResults,
+                Success: sr.Success,
+                ErrorMessage: sr.ErrorMessage,
+                Data: sr.Data
+            )).ToList()
         );
 
         return Ok(response);
