@@ -5,6 +5,6 @@ using EY.DueDiligenceScreening.API.Screening.Domain.Model.Queries;
 
 public interface IWorldBankScraperService
 {
-    Task<List<WorldBankDebarredItem>> ScrapeAsync(GetInfoByCompanyNameQuery query);
+    Task<List<WorldBankDebarredItem>> ScrapeAsync(GetInfoByCompanyNameQuery query, CancellationToken cancellationToken = default);
 }
 

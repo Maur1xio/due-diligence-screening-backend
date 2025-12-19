@@ -1,22 +1,66 @@
-using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
 using EY.DueDiligenceScreening.API.IAM.Application.CommandServices;
 using EY.DueDiligenceScreening.API.IAM.Application.Internal;
 using EY.DueDiligenceScreening.API.IAM.Application.QueryServices;
 using EY.DueDiligenceScreening.API.IAM.Domain.Repositories;
 using EY.DueDiligenceScreening.API.IAM.Domain.Services;
 using EY.DueDiligenceScreening.API.IAM.Infrastructure.Repositories;
+using EY.DueDiligenceScreening.API.Screening.Application.Services;
 using EY.DueDiligenceScreening.API.Screening.Domain.Services;
 using EY.DueDiligenceScreening.API.Screening.Infrastructure.Scrapers;
+using EY.DueDiligenceScreening.API.Shared.Infrastructure.Extensions;
 using EY.DueDiligenceScreening.API.Shared.Infrastructure.Persistence.EFC;
 using EY.DueDiligenceScreening.API.Shared.Infrastructure.Settings;
+using EY.DueDiligenceScreening.API.Shared.Infrastructure.Swagger;
+using EY.DueDiligenceScreening.API.Shared.Interfaces.Filters;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
+using System.Threading.RateLimiting;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0  
+            }));
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        
+        var response = new
+        {
+            success = false,
+            statusCode = 429,
+            message = "Too many requests. Please try again later.",
+            errors = new
+            {
+                code = "RATE_LIMIT_EXCEEDED",
+                details = "You have exceeded the maximum number of 20 requests per minute.",
+                retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+                    ? retryAfter.TotalSeconds
+                    : 60
+            },
+            timestamp = DateTime.UtcNow
+        };
+
+        await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+    };
+});
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>();
@@ -45,10 +89,11 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
+    
+    options.ConfigureCustomEvents();
 });
 
 builder.Services.AddAuthorization();
-
 
 builder.Services.AddCors(options =>
 {
@@ -61,11 +106,14 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 builder.Services.AddControllers(options =>
 {
-    options.Filters.Add<EY.DueDiligenceScreening.API.Shared.Interfaces.Filters.ApiResponseFilter>();
-    options.Filters.Add<EY.DueDiligenceScreening.API.Shared.Interfaces.Filters.GlobalExceptionFilter>();
+    options.Filters.Add<ApiResponseFilter>();
+    options.Filters.Add<GlobalExceptionFilter>();
+})
+.AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 })
 .ConfigureApiBehaviorOptions(options =>
 {
@@ -87,7 +135,6 @@ builder.Services.AddControllers(options =>
         return new BadRequestObjectResult(errorResponse);
     };
 });
-
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -126,8 +173,11 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+    
+    c.UseInlineDefinitionsForEnums();
+    
+    c.SchemaFilter<ExampleSchemaFilter>();
 });
-
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
@@ -139,7 +189,12 @@ builder.Services.AddScoped<IOfacScraperService, OfacPlaywrightScraperService>();
 builder.Services.AddScoped<IOffshoreLeaksScraperService, OffshoreLeaksPlaywrightScraperService>();
 builder.Services.AddScoped<IWorldBankScraperService, WorldBankPlaywrightScraperService>();
 
+builder.Services.AddScoped<IMultiSourceScreeningService, MultiSourceScreeningService>();
+
 var app = builder.Build();
+
+
+app.UseRateLimiter();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -157,19 +212,10 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    try
-    {
-        dbContext.Database.EnsureCreated();
-    }
-    catch (Exception ex)
-    {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred while creating the database.");
-    }
+    dbContext.Database.EnsureCreated();
 }
 
 app.Run();

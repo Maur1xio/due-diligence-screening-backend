@@ -8,19 +8,12 @@ namespace EY.DueDiligenceScreening.API.Screening.Infrastructure.Scrapers;
 
 public class OfacPlaywrightScraperService : IOfacScraperService
 {
-    private readonly ILogger<OfacPlaywrightScraperService> _logger;
-
     private const string OFAC_URL = "https://sanctionssearch.ofac.treas.gov/";
     private const string NAME_INPUT_ID = "#ctl00_MainContent_txtLastName";
     private const string SEARCH_BUTTON_ID = "#ctl00_MainContent_btnSearch";
     private const string RESULTS_TABLE_ID = "#gvSearchResults";
 
-    public OfacPlaywrightScraperService(ILogger<OfacPlaywrightScraperService> logger)
-    {
-        _logger = logger;
-    }
-
-    public async Task<List<OfacItem>> ScrapeAsync(GetInfoByCompanyNameQuery query)
+    public async Task<List<OfacItem>> ScrapeAsync(GetInfoByCompanyNameQuery query, CancellationToken cancellationToken = default)
     {
         var companyName = query.companyName;
         
@@ -30,12 +23,22 @@ public class OfacPlaywrightScraperService : IOfacScraperService
         int minimumScore = 95;
         var results = new List<OfacItem>();
 
+        IBrowser? browser = null;
+
         try
         {
             using var playwright = await Playwright.CreateAsync();
-            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions 
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions 
             { 
                 Headless = true 
+            });
+
+            using var cancellationRegistration = cancellationToken.Register(() =>
+            {
+                try { browser?.CloseAsync().GetAwaiter().GetResult(); } catch { }
             });
 
             await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
@@ -45,6 +48,8 @@ public class OfacPlaywrightScraperService : IOfacScraperService
             });
 
             var page = await context.NewPageAsync();
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             await page.GotoAsync(OFAC_URL, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
             await page.WaitForSelectorAsync(NAME_INPUT_ID);
@@ -78,7 +83,12 @@ public class OfacPlaywrightScraperService : IOfacScraperService
                 }
             }", new { minimumScore, companyName });
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             await page.Locator(SEARCH_BUTTON_ID).ClickAsync();
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
             try
             {
                 await page.WaitForSelectorAsync($"{RESULTS_TABLE_ID}, #ctl00_MainContent_lblMessage", 
@@ -88,10 +98,14 @@ public class OfacPlaywrightScraperService : IOfacScraperService
             {
                 return results;
             }
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
             if (await page.Locator(RESULTS_TABLE_ID).CountAsync() == 0)
             {
                 return results;
             }
+            
             var jsonResponse = await page.EvaluateAsync<JsonElement>(@"() => {
                 const rows = Array.from(document.querySelectorAll('#gvSearchResults tbody tr'));
                 const list = [];
@@ -120,6 +134,9 @@ public class OfacPlaywrightScraperService : IOfacScraperService
             {
                 foreach (var item in jsonResponse.EnumerateArray())
                 {
+                    if (results.Count % 10 == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
                     string GetValue(string prop) => item.TryGetProperty(prop, out var v) ? v.GetString() ?? "" : "";
 
                     string scoreText = GetValue("score");
@@ -139,9 +156,20 @@ public class OfacPlaywrightScraperService : IOfacScraperService
 
             return results;
         }
+        catch (OperationCanceledException)
+        {
+            throw; 
+        }
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to scrape OFAC for company: {companyName}", ex);
+        }
+        finally
+        {
+            if (browser != null)
+            {
+                try { await browser.CloseAsync(); } catch { }
+            }
         }
     }
 }

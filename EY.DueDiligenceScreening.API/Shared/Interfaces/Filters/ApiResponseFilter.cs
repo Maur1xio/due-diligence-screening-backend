@@ -75,12 +75,12 @@ public class ApiResponseFilter : IResultFilter
     {
         return statusCode switch
         {
-            400 => "Bad request",
-            401 => "Unauthorized",
-            403 => "Forbidden",
-            404 => "Not found",
-            500 => "Internal server error",
-            _ => "An error occurred"
+            400 => "The request contains invalid data",
+            401 => "Authentication is required to access this resource",
+            403 => "You don't have permission to access this resource",
+            404 => "The requested resource was not found",
+            500 => "An internal server error occurred",
+            _ => "An error occurred while processing your request"
         };
     }
 

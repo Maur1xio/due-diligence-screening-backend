@@ -8,17 +8,10 @@ namespace EY.DueDiligenceScreening.API.Screening.Infrastructure.Scrapers;
 
 public class OffshoreLeaksPlaywrightScraperService : IOffshoreLeaksScraperService
 {
-    private readonly ILogger<OffshoreLeaksPlaywrightScraperService> _logger;
-
     private const string BASE_URL = "https://offshoreleaks.icij.org";
     private const string SEARCH_URL = "https://offshoreleaks.icij.org/search";
-    
-    public OffshoreLeaksPlaywrightScraperService(ILogger<OffshoreLeaksPlaywrightScraperService> logger)
-    {
-        _logger = logger;
-    }
 
-    public async Task<List<OffshoreLeaksItem>> ScrapeAsync(GetInfoByCompanyNameQuery query)
+    public async Task<List<OffshoreLeaksItem>> ScrapeAsync(GetInfoByCompanyNameQuery query, CancellationToken cancellationToken = default)
     {
         var companyName = query.companyName;
         
@@ -26,65 +19,66 @@ public class OffshoreLeaksPlaywrightScraperService : IOffshoreLeaksScraperServic
             throw new ArgumentException("Company name cannot be empty", nameof(companyName));
 
         var results = new List<OffshoreLeaksItem>();
+        IBrowser? browser = null;
 
         try
         {
             using var playwright = await Playwright.CreateAsync();
-            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions 
+            cancellationToken.ThrowIfCancellationRequested();
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions 
             { 
                 Headless = true 
             });
+
+            using var cancellationRegistration = cancellationToken.Register(() =>
+            {
+                try { browser?.CloseAsync().GetAwaiter().GetResult(); } catch { }
+            });
+
             await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
                 UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Safari/537.36",
                 ViewportSize = new ViewportSize { Width = 1920, Height = 1080 }
             });
+            
             var page = await context.NewPageAsync();
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var searchUrl = $"{SEARCH_URL}?q={Uri.EscapeDataString(companyName)}&c=&j=&d=";
             await page.GotoAsync(searchUrl, new PageGotoOptions 
             { 
                 WaitUntil = WaitUntilState.NetworkIdle,
                 Timeout = 60000
             });
-            await Task.Delay(1500);
-            try
-            {
-                var modalExists = await page.Locator(".modal-content").CountAsync() > 0;
-                
-                if (modalExists)
-                {
-                    await page.EvaluateAsync(@"() => {
-                        const checkbox = document.querySelector('.modal-content input#accept, .modal-content input[name=""accept""]');
-                        if (checkbox) {
-                            checkbox.checked = true;
-                            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                            checkbox.dispatchEvent(new Event('input', { bubbles: true }));
+            await Task.Delay(1500, cancellationToken);
+            
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            var modalExists = await page.Locator(".modal-content").CountAsync() > 0;
+            
+            if (modalExists){
+                await page.EvaluateAsync(@"() => {
+                    const checkbox = document.querySelector('.modal-content input#accept, .modal-content input[name=""accept""]');
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                        checkbox.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                    setTimeout(() => {
+                        const submitBtn = document.querySelector('.modal-content button[type=""submit""]');
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.click();
                         }
-                        setTimeout(() => {
-                            const submitBtn = document.querySelector('.modal-content button[type=""submit""]');
-                            if (submitBtn) {
-                                submitBtn.disabled = false;
-                                submitBtn.click();
-                            }
-                        }, 300);
-                    }");
-                    await Task.Delay(1000);
-                    try
-                    {
-                        await page.WaitForSelectorAsync(".modal-content", 
-                            new PageWaitForSelectorOptions { State = WaitForSelectorState.Hidden, Timeout = 10000 });
-                    }
-                    catch (TimeoutException)
-                    {
-                    }
-                }
-                else
-                {
-                }
+                    }, 300);
+                }");
+                await Task.Delay(1000, cancellationToken);
+                await page.WaitForSelectorAsync(".modal-content", 
+                        new PageWaitForSelectorOptions { State = WaitForSelectorState.Hidden, Timeout = 10000 });
             }
-            catch (Exception ex)
-            {
-            }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
@@ -107,11 +101,14 @@ public class OffshoreLeaksPlaywrightScraperService : IOffshoreLeaksScraperServic
                 }");
                 return results;
             }
+            cancellationToken.ThrowIfCancellationRequested();
+            
             var tableExists = await page.Locator(".search__results__table").CountAsync() > 0;
             if (!tableExists)
             {
                 return results;
             }
+            
             var jsonResponse = await page.EvaluateAsync<JsonElement>(@"() => {
                 const rows = Array.from(document.querySelectorAll('.search__results__table tbody tr'));
                 const results = [];
@@ -139,6 +136,9 @@ public class OffshoreLeaksPlaywrightScraperService : IOffshoreLeaksScraperServic
             {
                 foreach (var item in jsonResponse.EnumerateArray())
                 {
+                    if (results.Count % 10 == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
                     string GetValue(string prop) => 
                         item.TryGetProperty(prop, out var v) ? v.GetString() ?? "" : "";
 
@@ -158,11 +158,23 @@ public class OffshoreLeaksPlaywrightScraperService : IOffshoreLeaksScraperServic
                     ));
                 }
             }
+            
             return results;
+        }
+        catch (OperationCanceledException)
+        {
+            throw; 
         }
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to scrape Offshore Leaks for company: {companyName}", ex);
+        }
+        finally
+        {
+            if (browser != null)
+            {
+                try { await browser.CloseAsync(); } catch { }
+            }
         }
     }
 }
