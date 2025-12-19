@@ -10,6 +10,8 @@ using EY.DueDiligenceScreening.API.IAM.Application.QueryServices;
 using EY.DueDiligenceScreening.API.IAM.Domain.Repositories;
 using EY.DueDiligenceScreening.API.IAM.Domain.Services;
 using EY.DueDiligenceScreening.API.IAM.Infrastructure.Repositories;
+using EY.DueDiligenceScreening.API.Screening.Domain.Services;
+using EY.DueDiligenceScreening.API.Screening.Infrastructure.Scrapers;
 using EY.DueDiligenceScreening.API.Shared.Infrastructure.Persistence.EFC;
 using EY.DueDiligenceScreening.API.Shared.Infrastructure.Settings;
 
@@ -132,6 +134,8 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthCommandService, AuthCommandService>();
 builder.Services.AddScoped<IAuthQueryService, AuthQueryService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+builder.Services.AddScoped<IOfacScraperService, OfacPlaywrightScraperService>();
 
 
 var app = builder.Build();
