@@ -27,7 +27,7 @@ public class OfacPlaywrightScraperService : IOfacScraperService
         if (string.IsNullOrWhiteSpace(companyName))
             throw new ArgumentException("Company name cannot be empty", nameof(companyName));
 
-        const int minimumScore = 95;
+        int minimumScore = 95;
         var results = new List<OfacItem>();
 
         try

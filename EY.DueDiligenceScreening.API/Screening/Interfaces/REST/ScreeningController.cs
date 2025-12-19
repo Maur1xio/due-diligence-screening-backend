@@ -13,12 +13,18 @@ namespace EY.DueDiligenceScreening.API.Screening.Interfaces.REST;
 public class ScreeningController : ControllerBase
 {
     private readonly IOfacScraperService _ofacScraperService;
+    private readonly IOffshoreLeaksScraperService _offshoreLeaksScraperService;
+    private readonly IWorldBankScraperService _worldBankScraperService;
 
     public ScreeningController(
         IOfacScraperService ofacScraperService,
+        IOffshoreLeaksScraperService offshoreLeaksScraperService,
+        IWorldBankScraperService worldBankScraperService,
         ILogger<ScreeningController> logger)
     {
         _ofacScraperService = ofacScraperService;
+        _offshoreLeaksScraperService = offshoreLeaksScraperService;
+        _worldBankScraperService = worldBankScraperService;
     }
 
     [HttpPost("ofac")]
@@ -43,6 +49,61 @@ public class ScreeningController : ControllerBase
                 List: item.List,
                 Score: item.Score,
                 DetailsUrl: item.DetailsUrl
+            )).ToList(),
+            ExecutedAt: DateTime.UtcNow
+        );
+
+        return Ok(response);
+    }
+
+
+    [HttpPost("offshore-leaks")]
+    [ProducesResponseType(typeof(OffshoreLeaksResultResource), 200)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 400)]
+    public async Task<ActionResult<OffshoreLeaksResultResource>> ScrapeOffshoreLeaks(
+        [FromBody] OfacScrapeRequestResource request) 
+    {
+        var query = new GetInfoByCompanyNameQuery(request.CompanyName);
+        var results = await _offshoreLeaksScraperService.ScrapeAsync(query);
+
+        var response = new OffshoreLeaksResultResource(
+            CompanyName: request.CompanyName,
+            TotalResults: results.Count,
+            Items: results.Select(item => new OffshoreLeaksItemResource(
+                EntityName: item.EntityName,
+                EntityNodeUrl: item.EntityNodeUrl,
+                Jurisdiction: item.Jurisdiction,
+                LinkedTo: item.LinkedTo,
+                DataSource: item.DataSource,
+                DataSourceUrl: item.DataSourceUrl
+            )).ToList(),
+            ExecutedAt: DateTime.UtcNow
+        );
+
+        return Ok(response);
+    }
+
+    [HttpPost("world-bank")]
+    [ProducesResponseType(typeof(WorldBankResultResource), 200)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 400)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 401)]
+    [ProducesResponseType(typeof(ApiErrorResponse), 500)]
+    public async Task<ActionResult<WorldBankResultResource>> ScrapeWorldBank(
+        [FromBody] OfacScrapeRequestResource request)
+    {
+        var query = new GetInfoByCompanyNameQuery(request.CompanyName);
+        var results = await _worldBankScraperService.ScrapeAsync(query);
+
+        var response = new WorldBankResultResource(
+            CompanyName: request.CompanyName,
+            TotalResults: results.Count,
+            Items: results.Select(item => new WorldBankItemResource(
+                FirmName: item.FirmName,
+                Address: item.Address,
+                Country: item.Country,
+                FromDate: item.FromDate,
+                ToDate: item.ToDate,
+                Grounds: item.Grounds
             )).ToList(),
             ExecutedAt: DateTime.UtcNow
         );
