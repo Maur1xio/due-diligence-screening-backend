@@ -136,7 +136,8 @@ builder.Services.AddScoped<IAuthQueryService, AuthQueryService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 
 builder.Services.AddScoped<IOfacScraperService, OfacPlaywrightScraperService>();
-
+builder.Services.AddScoped<IOffshoreLeaksScraperService, OffshoreLeaksPlaywrightScraperService>();
+builder.Services.AddScoped<IWorldBankScraperService, WorldBankPlaywrightScraperService>();
 
 var app = builder.Build();
 
