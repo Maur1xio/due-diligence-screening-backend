@@ -4,6 +4,10 @@ using EY.DueDiligenceScreening.API.IAM.Application.QueryServices;
 using EY.DueDiligenceScreening.API.IAM.Domain.Repositories;
 using EY.DueDiligenceScreening.API.IAM.Domain.Services;
 using EY.DueDiligenceScreening.API.IAM.Infrastructure.Repositories;
+using EY.DueDiligenceScreening.API.Providers.Application.Services;
+using EY.DueDiligenceScreening.API.Providers.Domain.Repositories;
+using EY.DueDiligenceScreening.API.Providers.Domain.Services;
+using EY.DueDiligenceScreening.API.Providers.Infrastructure.Persistence;
 using EY.DueDiligenceScreening.API.Screening.Application.Services;
 using EY.DueDiligenceScreening.API.Screening.Domain.Services;
 using EY.DueDiligenceScreening.API.Screening.Infrastructure.Scrapers;
@@ -190,6 +194,12 @@ builder.Services.AddScoped<IOffshoreLeaksScraperService, OffshoreLeaksPlaywright
 builder.Services.AddScoped<IWorldBankScraperService, WorldBankPlaywrightScraperService>();
 
 builder.Services.AddScoped<IMultiSourceScreeningService, MultiSourceScreeningService>();
+
+builder.Services.AddScoped<IProviderRepository, ProviderRepository>();
+builder.Services.AddScoped<IScreeningHistoryRepository, ScreeningHistoryRepository>();
+builder.Services.AddScoped<IProviderCommandService, ProviderCommandService>();
+builder.Services.AddScoped<IProviderQueryService, ProviderQueryService>();
+builder.Services.AddScoped<IScreeningHistoryService, ScreeningHistoryService>();
 
 var app = builder.Build();
 

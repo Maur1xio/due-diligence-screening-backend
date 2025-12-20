@@ -38,7 +38,6 @@ public class MultiSourceScreeningService : IMultiSourceScreeningService
 
         var tasks = new List<Task<SourceResult>>();
 
-        // Usar CancellationToken para propagar cancelación a todas las tareas
         foreach (var source in query.Sources)
         {
             tasks.Add(ExecuteSourceScreeningAsync(source, companyQuery, cancellationToken));
@@ -61,7 +60,7 @@ public class MultiSourceScreeningService : IMultiSourceScreeningService
         catch (OperationCanceledException)
         {
             _logger.LogWarning("⚠️ Multi-source screening cancelled for company: {CompanyName}", query.CompanyName);
-            throw; // Re-lanzar para que ASP.NET maneje la respuesta
+            throw; 
         }
     }
 
@@ -74,7 +73,6 @@ public class MultiSourceScreeningService : IMultiSourceScreeningService
         
         try
         {
-            // Verificar si ya se solicitó cancelación antes de iniciar el scraping
             cancellationToken.ThrowIfCancellationRequested();
 
             object data;
