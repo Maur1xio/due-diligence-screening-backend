@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: screening-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - screening-network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStrong!Passw0rd" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: screening-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=ScreeningDB;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True;MultipleActiveResultSets=true;Connection Timeout=60
+      - Jwt__Secret=niamniam_seVienen_Cositassszzz_BUEEEEEEEEEEEEEEEASIESTAELWEBSCRAPINGCHICOSSSS
+      - Jwt__Issuer=ScreeningAPI
+      - Jwt__Audience=ScreeningClients
+      - Jwt__ExpirationHours=24
+      - AllowedOrigins__0=http://localhost:3000
+      - AllowedOrigins__1=http://localhost:5173
+    ports:
+      - "8080:80"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - screening-network
+    restart: unless-stopped
+
+networks:
+  screening-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+    driver: local
