@@ -1,0 +1,71 @@
+# ============================================================================
+# .dockerignore - Excluir archivos innecesarios al construir la imagen Docker
+# ============================================================================
+
+# Directorios de compilación y salida
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# Directorios de IDEs
+**/.vs/
+**/.vscode/
+**/.idea/
+**/.vsconfig
+
+# Control de versiones
+**/.git/
+**/.gitignore
+**/.gitattributes
+
+# Archivos de usuario y temporales
+**/*.user
+**/*.suo
+**/*.cache
+**/*.log
+**/*.swp
+**/*.bak
+**/*.tmp
+**/Thumbs.db
+**/.DS_Store
+
+# Dependencias de Node.js (si las hubiera)
+**/node_modules/
+**/npm-debug.log
+**/package-lock.json
+
+# Archivos de documentación
+**/*.md
+**/README.md
+**/LICENSE
+**/CHANGELOG.md
+**/.editorconfig
+
+# Archivos de configuración local
+**/appsettings.Development.json
+**/launchSettings.json
+
+# Carpetas de prueba
+**/TestResults/
+**/*.Test/
+**/*.Tests/
+
+# Archivos de NuGet
+**/.nuget/
+**/packages/
+**/*.nupkg
+
+# Playwright (se instalan en el contenedor)
+**/.playwright/
+**/ms-playwright/
+
+# Base de datos local
+**/*.db
+**/*.sqlite
+**/*.mdf
+**/*.ldf
+
+# Otros
+**/wwwroot/lib/
+
