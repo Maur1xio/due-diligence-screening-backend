@@ -28,6 +28,9 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 🔥 Configuración para producción: Priorizar variables de entorno sobre appsettings.json
+builder.Configuration.AddEnvironmentVariables();
+
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
@@ -103,7 +106,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+        // 🔥 CORS dinámico: Lee de configuración o usa valores por defecto
+        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() 
+            ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+        
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -203,6 +210,7 @@ builder.Services.AddScoped<IScreeningHistoryService, ScreeningHistoryService>();
 
 var app = builder.Build();
 
+//acolocaar
 
 app.UseRateLimiter();
 
