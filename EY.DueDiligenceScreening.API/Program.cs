@@ -210,7 +210,7 @@ builder.Services.AddScoped<IScreeningHistoryService, ScreeningHistoryService>();
 
 var app = builder.Build();
 
-//acolocaar
+//acolocaar, mi release
 
 app.UseRateLimiter();
 
